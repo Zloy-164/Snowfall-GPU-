@@ -1,0 +1,28 @@
+
+name: Build Snowfall GPU for Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Compile locked release
+        shell: pwsh
+        run: |
+          cd windows
+          cargo build --release --locked --bin SnowfallGPU
+      - name: Upload portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: SnowfallGPU-Windows
+          path: windows/target/release/SnowfallGPU.exe
+          if-no-files-found: error
