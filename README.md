@@ -1,11 +1,5 @@
 # Snowfall GPU — experimental Windows build
 
-**This is a noncommercial modified fork of Snowhush, NOT a new rendering engine.**
-Original project: https://github.com/mbezruchko/Snowhush
-Original copyright: © 2026 Mykhailo Bezruchko.
-Original license: PolyForm Noncommercial License 1.0.0, included in LICENSE.
-Noncommercial uses only; you must preserve this attribution/license in redistributed copies.
-
 ## What's changed
 - Direct3D 11 + DirectComposition renderer and original snow physics.
 - GPU load caps: default up to 30 FPS, tray toggle up to 45 FPS; 20 FPS in battery saver. It can skip rendering static frames.
