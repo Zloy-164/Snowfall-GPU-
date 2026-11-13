@@ -1,4 +1,5 @@
 name: Build Snowfall GPU for Windows
+
 on:
   push:
     branches: [main]
@@ -7,26 +8,28 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: snowfall-gpu-build
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-2022
     steps:
-      - name: Checkout sources
+      - name: Checkout source
         uses: actions/checkout@v4
-      - name: Install Rust stable
+      - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Place core library next to windows
+      - name: Check project layout
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path core | Out-Null
-          Copy-Item -Path windows/core/* -Destination core -Recurse -Force
-          if (!(Test-Path core/src/lib.rs)) { throw "Missing core/src/lib.rs" }
-      - name: Compile locked release
+          if (!(Test-Path core/src/lib.rs)) { throw "core/src/lib.rs is missing" }
+          if (!(Test-Path windows/Cargo.lock)) { throw "windows/Cargo.lock is missing" }
+      - name: Build Windows GPU application
         shell: pwsh
-        run: |
-          cd windows
-          cargo build --release --locked --bin SnowfallGPU
-      - name: Upload portable EXE
+        working-directory: windows
+        run: cargo build --release --locked --bin SnowfallGPU
+      - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: SnowfallGPU-Windows
