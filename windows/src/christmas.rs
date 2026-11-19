@@ -263,13 +263,32 @@ fn cached_fir(hdc: HDC, size: u32) {
             // Collision surface is independent of display scale, using the
             // precise transparent outline of the same evergreen sprite.
             let sample = |x: f32, y: f32| -> [u8;4] {
-                let sx = ((x - 29.0) / 202.0 * pic.width as f32) as i32;
-                let sy = ((y - 12.0) / 308.0 * pic.height as f32) as i32;
-                if sx < 0 || sy < 0 || sx >= pic.width as i32 || sy >= pic.height as i32 {
+                let sx = (x - 29.0) / 202.0 * pic.width as f32;
+                let sy = (y - 12.0) / 308.0 * pic.height as f32;
+                if sx < 0.0 || sy < 0.0 || sx >= pic.width as f32 || sy >= pic.height as f32 {
                     return [0,0,0,0];
                 }
-                let i = (sy as usize * pic.width as usize + sx as usize) * 4;
-                [pic.pixels[i],pic.pixels[i+1],pic.pixels[i+2],pic.pixels[i+3]]
+                // Bilinear interpolation of premultiplied RGBA preserves
+                // natural hair-thin needle details at every tree size.
+                let x0 = sx.floor() as usize;
+                let y0 = sy.floor() as usize;
+                let x1 = (x0 + 1).min(pic.width as usize - 1);
+                let y1 = (y0 + 1).min(pic.height as usize - 1);
+                let tx = sx - x0 as f32;
+                let ty = sy - y0 as f32;
+                let a = (y0 * pic.width as usize + x0) * 4;
+                let b = (y0 * pic.width as usize + x1) * 4;
+                let c = (y1 * pic.width as usize + x0) * 4;
+                let d = (y1 * pic.width as usize + x1) * 4;
+                let mut result = [0u8;4];
+                for channel in 0..4 {
+                    let v = pic.pixels[a+channel] as f32 * (1.0-tx) * (1.0-ty)
+                          + pic.pixels[b+channel] as f32 * tx * (1.0-ty)
+                          + pic.pixels[c+channel] as f32 * (1.0-tx) * ty
+                          + pic.pixels[d+channel] as f32 * tx * ty;
+                    result[channel] = v.clamp(0.0,255.0) as u8;
+                }
+                result
             };
             let mut mask = vec![0u8; WIDTH * HEIGHT];
             for y in 0..HEIGHT {
@@ -304,7 +323,11 @@ fn cached_fir(hdc: HDC, size: u32) {
                         let px = sample(x as f32 / scale, y as f32 / scale);
                         let o = (y*width as usize + x) * 4;
                         // DIB memory is BGRA; key colour is RGB(1,2,3).
-                        if px[3] < 72 {
+                        // Ordered alpha dither gives feathered transparent edges
+                        // instead of the hard silhouette of colour-keyed Windows.
+                        let bayer: [[u8;4];4] = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+                        let threshold = 35 + bayer[y & 3][x & 3] as u32 * 10;
+                        if (px[3] as u32) < threshold {
                             dest[o..o+4].copy_from_slice(&[3,2,1,0]);
                         } else {
                             let a = px[3].max(1) as u32;
