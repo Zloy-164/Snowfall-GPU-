@@ -145,7 +145,7 @@ fn animate(scene: &mut Scene) {
     // Snowflakes do not hit a fake triangle. They collide with the actual
     // alpha silhouette of the photorealistic fir and land where foliage begins.
     if intensity > 0.0 {
-        let interval = (16.0 - 13.0 * intensity).max(3.0) as u32;
+        let interval = (10.0 - 7.0 * intensity).max(3.0) as u32;
         if scene.frame % interval == 0 && scene.flakes.len() < 110 {
             let x = 21.0 + rand(scene) * 218.0;
             let vx = (rand(scene) - 0.5) * 0.85;
@@ -158,11 +158,28 @@ fn animate(scene: &mut Scene) {
     for f in &mut scene.flakes {
         let prev_x = f.x;
         let prev_y = f.y;
-        f.vy = (f.vy + 0.10).min(5.5);
-        if f.sliding { f.vx += f.vx.signum() * 0.018; }
-        f.x += f.vx + wind;
-        f.y += f.vy;
-        if !f.sliding && mask_at(&scene.mask, f.x, f.y) > 110 && mask_at(&scene.mask, prev_x, prev_y) <= 110 {
+        if f.sliding {
+            // A loose clump follows an outward-sloping bough to its tip
+            // before gravity takes over. It cannot fall from the centre.
+            let nx = f.x + f.vx + wind;
+            let ny = f.y + 0.30 + f.vx.abs() * 0.15;
+            if mask_at(&scene.mask, nx, ny + 3.0) > 85 {
+                f.x = nx;
+                f.y = ny;
+                f.vx += f.vx.signum() * 0.014;
+            } else {
+                f.x = nx;
+                f.y = ny;
+                f.sliding = false;
+                f.pierce = 255; // continue falling, do not reattach
+                f.vy = 0.85;
+            }
+        } else {
+            f.vy = (f.vy + 0.10).min(5.5);
+            f.x += f.vx + wind;
+            f.y += f.vy;
+        }
+        if !f.sliding && f.pierce != 255 && mask_at(&scene.mask, f.x, f.y) > 110 && mask_at(&scene.mask, prev_x, prev_y) <= 110 {
             if f.pierce > 0 { f.pierce -= 1; } else {
                 collisions.push((f.x, f.y));
                 f.y = 500.0;
@@ -180,7 +197,7 @@ fn animate(scene: &mut Scene) {
             patch.x = patch.x * 0.88 + x * 0.12;
             patch.y = patch.y.min(y);
         }
-        patch.mass = (patch.mass + 0.075).min(1.1);
+        patch.mass = (patch.mass + 0.20).min(1.1);
     }
     // Gravity gradually sheds overload on the nearest outer branch edge.
     for band in 0..BANDS {
@@ -188,7 +205,7 @@ fn animate(scene: &mut Scene) {
             let patch = scene.patches[band][cell];
             if patch.mass > 0.57 && scene.frame % (13 + band as u32 * 5) == 0 {
                 let side = if patch.x < 130.0 { -1.0 } else { 1.0 };
-                let speed = 0.45 + rand(scene) * 0.65;
+                let speed = 0.65 + rand(scene) * 0.65;
                 scene.patches[band][cell].mass = (patch.mass - 0.24).max(0.0);
                 if scene.flakes.len() < 110 {
                     scene.flakes.push(Flake { x: patch.x + side * 4.0,
