@@ -6,7 +6,7 @@ use std::mem::size_of;
 
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, Ellipse, EndPaint, FillRect, HGDIOBJ, PAINTSTRUCT, Polygon, SelectObject,
+    BeginPaint, CreateSolidBrush, DeleteObject, Ellipse, EndPaint, FillRect, InvalidateRect, HGDIOBJ, PAINTSTRUCT, Polygon, SelectObject,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
