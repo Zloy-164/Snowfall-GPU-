@@ -34,6 +34,12 @@ pub struct Settings {
     /// Unix seconds of the first run, or 0 for an install older than the stamp.
     pub installed_at: u32,
     pub halloween: Choice,
+    /// A stronger moonlit Halloween atmosphere; decorations remain independent.
+    pub halloween_night: bool,
+    /// Optional click-through festive desktop decoration.
+    pub tree_on: bool,
+    pub tree_size: u32,
+    pub tree_lights: bool,
     /// What falls: snow, leaves or rain; the kind picked last.
     pub mode: Mode,
     /// Two kinds fall together: `mix`, the one picked last after the one picked before it.
@@ -80,6 +86,10 @@ impl Settings {
             deep_interaction: read(w!("deepInteraction")).is_some_and(|v| v != 0),
             welcomed,
             installed_at,
+            halloween_night: read(w!("halloweenNight")).is_none_or(|v| v != 0),
+            tree_on: read(w!("christmasTreeOn")).is_some_and(|v| v != 0),
+            tree_size: read(w!("christmasTreeSize")).unwrap_or(100).clamp(60, 160),
+            tree_lights: read(w!("christmasTreeLights")).is_none_or(|v| v != 0),
             halloween: Choice { on: read(w!("halloweenOn")).is_some_and(|v| v != 0), skipped: read(w!("halloweenSkipped")).unwrap_or(0) },
             // Before rain there was only a switch for leaves.
             max_performance: read(w!("performance")).is_some_and(|v| v == 1),
@@ -102,6 +112,10 @@ impl Settings {
         write(w!("deepInteraction"), self.deep_interaction as u32);
         write(w!("welcomed"), self.welcomed as u32);
         write(w!("installedAt"), self.installed_at);
+        write(w!("halloweenNight"), self.halloween_night as u32);
+        write(w!("christmasTreeOn"), self.tree_on as u32);
+        write(w!("christmasTreeSize"), self.tree_size);
+        write(w!("christmasTreeLights"), self.tree_lights as u32);
         write(w!("halloweenOn"), self.halloween.on as u32);
         write(w!("halloweenSkipped"), self.halloween.skipped);
         write(w!("mode"), MODES.iter().position(|&m| m == self.mode).unwrap_or(0) as u32);
