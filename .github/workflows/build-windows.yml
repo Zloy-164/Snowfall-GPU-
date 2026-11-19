@@ -46,10 +46,10 @@ jobs:
           $notes = @"
           Snowfall GPU v1.1.0 for Windows 10 and Windows 11.
           
-          NEW: Fuller layered evergreen instead of a triangle; choice of multicolour, warm white, ice blue, or retro garlands.
+          NEW: Photorealistic fir-tree sprite with fine foliage and natural draped garlands in multicolour, warm white, ice blue, or retro colours.
           HALLOWEEN: Toggle the moonlit night atmosphere independently from the spooky decoration.
           Adjustable tree size, blinking lights, and independent branch-snow toggle.
-          Branches collect falling flakes and shed snow under load in a lightweight local simulation.
+          Snow particles collide with the tree artwork's alpha mask and collect at contact points; overloaded patches slide outward to the branch tips before falling (lightweight local tree physics).
           The tree overlay is click-through and can be disabled at any time.
 
           Portable ZIP: extract and run SnowfallGPU.exe. No installation required.
