@@ -274,7 +274,7 @@ fn draw_fir(hdc: HDC, scale: f32) {
             rgb(49, 132, 78), rgb(62, 145, 90), rgb(83, 160, 106),
         ];
         let pens: Vec<HPEN> = needles.iter()
-            .map(|&c| CreatePen(PS_SOLID, (scale * 0.85).round().max(1.0) as i32, c).unwrap_or_default())
+            .map(|&c| CreatePen(PS_SOLID, (scale * 0.85).round().max(1.0) as i32, c))
             .collect();
         let old_pen = SelectObject(hdc, HGDIOBJ(pens[0].0));
         // Back-facing limbs first, front-facing limbs last.
