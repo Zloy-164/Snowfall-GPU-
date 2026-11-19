@@ -46,9 +46,11 @@ jobs:
           $notes = @"
           Snowfall GPU v1.1.0 for Windows 10 and Windows 11.
           
-          NEW: Optional animated Christmas tree in the tray menu: visibility, blinking lights, three sizes.
+          NEW: Fuller layered evergreen instead of a triangle; choice of multicolour, warm white, ice blue, or retro garlands.
           HALLOWEEN: Toggle the moonlit night atmosphere independently from the spooky decoration.
-          The festive overlay is click-through and can be disabled at any time.
+          Adjustable tree size, blinking lights, and independent branch-snow toggle.
+          Branches collect falling flakes and shed snow under load in a lightweight local simulation.
+          The tree overlay is click-through and can be disabled at any time.
 
           Portable ZIP: extract and run SnowfallGPU.exe. No installation required.
 
@@ -56,4 +58,6 @@ jobs:
           License: PolyForm Noncommercial 1.0.0. Copyright notice and license included in ZIP.
           Noncommercial use only. This build has not been independently security-audited.
           "@
-          gh release create v1.1.0 SnowfallGPU-Windows.zip --title "Snowfall GPU v1.1.0 · Festive Update" --notes $notes --target $env:GITHUB_SHA
+          gh release upload v1.1.0 SnowfallGPU-Windows.zip --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit v1.1.0 --title "Snowfall GPU v1.1.0 · Festive Update" --notes $notes
