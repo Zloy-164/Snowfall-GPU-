@@ -165,10 +165,11 @@ fn animate(scene: &mut Scene) {
         if scene.piles[i] > threshold && scene.frame % (14 + 3 * i as u32) == 0 {
             let side = if rand(scene) > 0.5 { 1.0 } else { -1.0 };
             scene.piles[i] = (scene.piles[i] - 0.16).max(0.05);
+            let slide_speed = 0.8 + rand(scene) * 0.6;
             scene.flakes.push(Flake {
                 x: 130.0 + side * REACH[i] * 0.76,
                 y: LEVELS[i] - 4.0,
-                vx: side * (0.8 + rand(scene) * 0.6),
+                vx: side * slide_speed,
                 vy: 0.45,
                 sliding: true,
             });
