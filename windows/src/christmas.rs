@@ -357,9 +357,11 @@ fn cached_fir(hdc: HDC, size: u32) {
                 let height = 346 * size as i32 / 100;
                 let dc = CreateCompatibleDC(Some(hdc));
                 let bitmap = CreateCompatibleBitmap(hdc, width, height);
-                    let _ = DeleteDC(dc);
+                if dc.0.is_null() || bitmap.0.is_null() {
+                    if !dc.0.is_null() { let _ = DeleteDC(dc); }
+                    if !bitmap.0.is_null() { let _ = DeleteObject(HGDIOBJ(bitmap.0)); }
                     return;
-                };
+                }
                 let previous = SelectObject(dc, HGDIOBJ(bitmap.0));
                 let bg = CreateSolidBrush(CLEAR);
                 let _ = FillRect(dc, &RECT { left: 0, top: 0, right: width, bottom: height }, bg);
