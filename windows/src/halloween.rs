@@ -70,7 +70,7 @@ pub fn pumpkin_pictures() -> Result<[Picture; 2]> {
     Ok([decode(LANTERN[0])?, decode(LANTERN[1])?])
 }
 
-fn decode(data: &[u8]) -> Result<Picture> {
+pub fn decode(data: &[u8]) -> Result<Picture> {
     unsafe {
         let imaging: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
         let stream = SHCreateMemStream(Some(data)).ok_or_else(Error::empty)?;
