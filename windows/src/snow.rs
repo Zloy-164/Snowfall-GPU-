@@ -62,6 +62,7 @@ pub enum Command {
     ClearSnow(bool),
     /// Halloween turned on or off from the menu.
     Halloween(Choice),
+    HalloweenNight(bool),
     /// Other kinds fall, once a gust has blown what is there away; when calm, for less motion, it melts where it
     /// lies instead. A kind only joining what falls starts at once.
     SwitchMode {
@@ -111,7 +112,7 @@ fn run_loop(commands: &Receiver<Command>, links: &Links, mut settings: Settings)
     let mut active = true;
     let mut budget = PowerBudget::Full;
     let mut spooky = halloween::shows(&settings);
-    let mut sky = Sky::now(spooky);
+    let mut sky = Sky::now(spooky && settings.halloween_night);
     let wallpapers = Wallpapers::new().inspect_err(|error| log!("wallpapers unavailable: {error}")).ok();
     let mut chores_at = 0;
     let mut light_at = 0;
@@ -214,6 +215,10 @@ fn run_loop(commands: &Receiver<Command>, links: &Links, mut settings: Settings)
                 Command::ClearSnow(calm) => {
                     let direction = screens.first().map_or(-1.0, |screen| screen.simulation.breeze_direction());
                     screens.iter_mut().for_each(|screen| screen.simulation.blow_away(direction, calm));
+                }
+                Command::HalloweenNight(on) => {
+                    settings.halloween_night = on;
+                    light_at = 0;
                 }
                 Command::Halloween(choice) => {
                     settings.halloween = choice;
