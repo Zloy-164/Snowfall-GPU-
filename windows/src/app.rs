@@ -63,6 +63,11 @@ const ID_TREE_SMALL: u32 = 232;
 const ID_TREE_MEDIUM: u32 = 233;
 const ID_TREE_LARGE: u32 = 234;
 const ID_HALLOWEEN_NIGHT: u32 = 235;
+const ID_TREE_GARLAND_CLASSIC: u32 = 236;
+const ID_TREE_GARLAND_WARM: u32 = 237;
+const ID_TREE_GARLAND_ICE: u32 = 238;
+const ID_TREE_GARLAND_RETRO: u32 = 239;
+const ID_TREE_SNOW: u32 = 240;
 /// Opacity from 10% up in steps of 5%: `ID_OPACITY` + the step.
 const ID_OPACITY: u32 = 400;
 const OPACITY_STEPS: u32 = 19;
@@ -212,7 +217,7 @@ pub fn run() -> Result<()> {
         let light = light_taskbar();
         let icon = tray_icon(emblem, light);
         add_tray_icon(window, icon);
-        christmas::configure(settings.tree_on, settings.tree_size, settings.tree_lights);
+        apply_tree(&settings);
         let _ = WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION);
         let _ = RegisterPowerSettingNotification(HANDLE(window.0), &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
         SetTimer(Some(window), TIMER_HALLOWEEN, 60_000, None);
@@ -395,7 +400,15 @@ fn entries(settings: &Settings, _login: bool, sliders: bool) -> Vec<Entry> {
         entries: vec![
             Entry::toggle(ID_TREE, "Показать ёлочку", settings.tree_on, true),
             Entry::toggle(ID_TREE_LIGHTS, "Мерцающие огоньки", settings.tree_lights, true),
+            Entry::toggle(ID_TREE_SNOW, "Снег на ветках и осыпание", settings.tree_snow, true),
             Entry::Separator,
+            Entry::header("Гирлянда"),
+            Entry::choice(ID_TREE_GARLAND_CLASSIC, "Разноцветная", settings.tree_garland == 0),
+            Entry::choice(ID_TREE_GARLAND_WARM, "Тёплая золотая", settings.tree_garland == 1),
+            Entry::choice(ID_TREE_GARLAND_ICE, "Ледяная голубая", settings.tree_garland == 2),
+            Entry::choice(ID_TREE_GARLAND_RETRO, "Ретро-лампочки", settings.tree_garland == 3),
+            Entry::Separator,
+            Entry::header("Размер"),
             Entry::choice(ID_TREE_SMALL, "Размер: маленькая (60%)", settings.tree_size == 60),
             Entry::choice(ID_TREE_MEDIUM, "Размер: средняя (100%)", settings.tree_size == 100),
             Entry::choice(ID_TREE_LARGE, "Размер: большая (140%)", settings.tree_size == 140),
@@ -500,12 +513,17 @@ fn choose(window: HWND, chosen: u32, _login: bool) {
         }),
         ID_ACCUMULATE => ACCUMULATE_OPEN.set(!ACCUMULATE_OPEN.get()),
         ID_OPACITY_FOLD => OPACITY_OPEN.set(!OPACITY_OPEN.get()),
-        ID_TREE | ID_TREE_LIGHTS | ID_TREE_SMALL | ID_TREE_MEDIUM | ID_TREE_LARGE | ID_HALLOWEEN_NIGHT => {
+        ID_TREE | ID_TREE_LIGHTS | ID_TREE_SMALL | ID_TREE_MEDIUM | ID_TREE_LARGE | ID_TREE_SNOW | ID_TREE_GARLAND_CLASSIC | ID_TREE_GARLAND_WARM | ID_TREE_GARLAND_ICE | ID_TREE_GARLAND_RETRO | ID_HALLOWEEN_NIGHT => {
             APP.with_borrow_mut(|app| {
                 let Some(app) = app else { return };
                 match chosen {
                     ID_TREE => app.settings.tree_on = !app.settings.tree_on,
                     ID_TREE_LIGHTS => app.settings.tree_lights = !app.settings.tree_lights,
+                    ID_TREE_SNOW => app.settings.tree_snow = !app.settings.tree_snow,
+                    ID_TREE_GARLAND_CLASSIC => app.settings.tree_garland = 0,
+                    ID_TREE_GARLAND_WARM => app.settings.tree_garland = 1,
+                    ID_TREE_GARLAND_ICE => app.settings.tree_garland = 2,
+                    ID_TREE_GARLAND_RETRO => app.settings.tree_garland = 3,
                     ID_TREE_SMALL => app.settings.tree_size = 60,
                     ID_TREE_MEDIUM => app.settings.tree_size = 100,
                     ID_TREE_LARGE => app.settings.tree_size = 140,
@@ -516,7 +534,7 @@ fn choose(window: HWND, chosen: u32, _login: bool) {
                     _ => {}
                 }
                 app.settings.save();
-                christmas::configure(app.settings.tree_on, app.settings.tree_size, app.settings.tree_lights);
+                apply_tree(&app.settings);
             });
         },
         ID_HALLOWEEN => {
@@ -602,13 +620,23 @@ fn choose(window: HWND, chosen: u32, _login: bool) {
                 _ => return,
             };
             settings.save();
+            apply_tree(settings);
             send(app, command);
         }),
     }
 }
 
+fn apply_tree(settings: &Settings) {
+    christmas::configure(
+        settings.tree_on, settings.tree_size, settings.tree_lights,
+        settings.tree_garland, settings.tree_snow,
+        settings.modes().contains(&Mode::Snow), settings.intensity,
+    );
+}
+
 fn switch_modes(app: &App) {
     app.settings.save();
+    apply_tree(&app.settings);
     let settings = &app.settings;
     send(app, Command::SwitchMode { mode: settings.mode, mixed: settings.mixed, mix: settings.mix, calm: !prefs::animations_enabled() });
 }
