@@ -8,7 +8,7 @@ use std::mem::size_of;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateSolidBrush, DeleteObject, Ellipse, EndPaint, FillRect, HDC, HGDIOBJ,
-    InvalidateRect, PAINTSTRUCT, Polygon, SelectObject,
+    InvalidateRect, PAINTSTRUCT, Polygon, SelectObject, CreatePen, CreateCompatibleDC, CreateCompatibleBitmap, BitBlt, DeleteDC, MoveToEx, LineTo, HBITMAP, HPEN, PS_SOLID, SRCCOPY,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -111,6 +111,7 @@ pub fn configure(on: bool, size: u32, lights: bool, garland: u32, snow: bool, sn
 }
 
 pub fn shutdown() {
+    FIR.with_borrow_mut(|slot| { *slot = None; });
     WINDOW.with(|slot| {
         let raw = slot.replace(0);
         if raw != 0 { unsafe { let _ = DestroyWindow(HWND(raw as _)); } }
@@ -219,47 +220,161 @@ fn circle(hdc: HDC, x: f32, y: f32, radius: f32, color: COLORREF, scale: f32) {
     }
 }
 
-fn bough(hdc: HDC, level: usize, scale: f32) {
-    let (top, width) = (LEVELS[level] - 61.0, REACH[level]);
-    // A dense uneven fir silhouette: different-length twigs instead of stacked triangles.
-    let mut points = Vec::with_capacity(35);
-    points.push(pt(130.0, top, scale));
-    for k in 1..=8 {
-        let t = k as f32 / 8.0;
-        let noise = ((k * 13 + level * 7) % 9) as f32 / 20.0;
-        points.push(pt(130.0 - (width * t * (0.82 + noise)), top + t * 62.0, scale));
-        points.push(pt(130.0 - width * (t * 0.92), top + t * 62.0 - 5.0, scale));
-    }
-    points.push(pt(130.0, LEVELS[level] + 3.0, scale));
-    for k in (1..=8).rev() {
-        let t = k as f32 / 8.0;
-        let noise = ((k * 11 + level * 5) % 8) as f32 / 20.0;
-        points.push(pt(130.0 + width * t * (0.82 + noise), top + t * 62.0, scale));
-        points.push(pt(130.0 + width * (t * 0.92), top + t * 62.0 - 5.0, scale));
-    }
-    let palette = [
-        rgb(15, 80, 48), rgb(17, 97, 54), rgb(16, 93, 50),
-        rgb(15, 88, 47), rgb(12, 76, 42),
-    ];
-    fill(hdc, &points, palette[level]);
-    // Blue-green needles, shadowed inner boughs and highlights.
-    for needle in 0..50 {
-        let k = needle as f32;
-        let t = (needle * 37 % 100) as f32 / 100.0;
-        let y = top + 12.0 + t * 44.0;
-        let x = 130.0 + ((needle * 29 + level * 41) % 193) as f32 / 96.0 * width - width;
-        let edge = width * ((y - top) / 62.0).clamp(0.15, 1.0);
-        if (x - 130.0).abs() < edge * 0.8 {
-            let shade = if needle % 3 == 0 { rgb(33, 128, 71) }
-                else if needle % 3 == 1 { rgb(24, 106, 58) } else { rgb(10, 61, 38) };
-            let tiny = [
-                pt(x - 1.5, y, scale),
-                pt(x + 5.5 + (k % 3.0), y - 4.0, scale),
-                pt(x + 2.0, y + 3.0, scale),
-            ];
-            fill(hdc, &tiny, shade);
+
+struct CachedFir {
+    dc: HDC,
+    bitmap: HBITMAP,
+    previous: HGDIOBJ,
+    size: u32,
+}
+thread_local! {
+    static FIR: RefCell<Option<CachedFir>> = const { RefCell::new(None) };
+}
+impl Drop for CachedFir {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = SelectObject(self.dc, self.previous);
+            let _ = DeleteObject(HGDIOBJ(self.bitmap.0));
+            let _ = DeleteDC(self.dc);
         }
     }
+}
+fn hash(mut v: u32) -> f32 {
+    v ^= v >> 16;
+    v = v.wrapping_mul(0x7feb_352d);
+    v ^= v >> 15;
+    v = v.wrapping_mul(0x846c_a68b);
+    v ^= v >> 16;
+    v as f32 / u32::MAX as f32
+}
+fn line(hdc: HDC, x1: f32, y1: f32, x2: f32, y2: f32, scale: f32) {
+    unsafe {
+        let _ = MoveToEx(hdc, (x1 * scale) as i32, (y1 * scale) as i32, None);
+        let _ = LineTo(hdc, (x2 * scale) as i32, (y2 * scale) as i32);
+    }
+}
+
+/// Build a full spruce crown using tapered radial limbs, side shoots and
+/// individual needles. Layers overlap rather than forming flat triangles.
+/// Rendered once to a small device bitmap; animation only blits the cached tree.
+fn draw_fir(hdc: HDC, scale: f32) {
+    unsafe {
+        // Visible textured trunk, very narrow at the crown.
+        let bark = CreateSolidBrush(rgb(81, 48, 31));
+        let _ = FillRect(hdc, &RECT {
+            left: (125.0 * scale) as i32, top: (40.0 * scale) as i32,
+            right: (137.0 * scale) as i32, bottom: (318.0 * scale) as i32,
+        }, bark);
+        let _ = DeleteObject(HGDIOBJ(bark.0));
+
+        let needles = [
+            rgb(8, 46, 36), rgb(12, 57, 41), rgb(13, 68, 44),
+            rgb(17, 76, 47), rgb(18, 85, 51), rgb(22, 94, 56),
+            rgb(30, 105, 62), rgb(38, 113, 66), rgb(42, 125, 74),
+            rgb(49, 132, 78), rgb(62, 145, 90), rgb(83, 160, 106),
+        ];
+        let pens: Vec<HPEN> = needles.iter()
+            .map(|&c| CreatePen(PS_SOLID, (scale * 0.85).round().max(1.0) as i32, c).unwrap_or_default())
+            .collect();
+        // Back-facing limbs first, front-facing limbs last.
+        // The ring radii expand continuously to create a natural silhouette.
+        for layer in 0..67u32 {
+            let u = layer as f32 / 66.0;
+            let y0 = 47.0 + 248.0 * u;
+            let radius = 7.5 + 112.0 * u.powf(1.12);
+            let branch_count = (9.0 + 13.0 * u) as u32;
+            for rank in 0..branch_count {
+                let theta = 2.0 * PI * (rank as f32 / branch_count as f32 + layer as f32 * 0.087);
+                let depth = theta.sin();
+                // Sort by depth by visiting back first then front.
+                // This slight per-layer alternation breaks radial symmetry.
+                let order_theta = if rank % 2 == 0 { theta + PI } else { theta };
+                let dx = order_theta.cos();
+                let dz = order_theta.sin();
+                let random = hash(layer * 301 + rank * 719 + 17);
+                let reach = radius * (0.78 + 0.33 * random);
+                let downward = (9.0 + 23.0 * u) * (0.78 + random * 0.3);
+                let side = dx * reach;
+                let tip_x = 131.0 + side;
+                let tip_y = y0 + downward + dz * reach * 0.12;
+                let center_x = 131.0 + dz * reach * 0.08;
+                let center_y = y0;
+                // Main limb under its twigs.
+                let dark = if dz > 0.0 { 3 } else { 1 };
+                let _ = SelectObject(hdc, HGDIOBJ(pens[dark].0));
+                line(hdc, center_x, center_y, tip_x, tip_y, scale);
+                let tufts = (7.0 + u * 10.0) as u32;
+                for t in 1..=tufts {
+                    let along = t as f32 / tufts as f32;
+                    let px = center_x + side * along;
+                    let py = center_y + (tip_y - center_y) * along;
+                    let branch_n = 5.5 + 18.0 * u * (1.0 - along * 0.65);
+                    let wobble = hash(layer * 1699 + rank * 463 + t * 101);
+                    let tip_width = branch_n * (0.74 + wobble * 0.65);
+                    // Left and right side shoots create the soft feathered edges.
+                    for direction in [-1.0f32, 1.0] {
+                        let tx = px + direction * tip_width * (0.55 + 0.45 * dx.abs());
+                        let ty = py - 3.0 - tip_width * 0.35 + dz * 3.0;
+                        let shade = if dz >= 0.0 {
+                            5 + (hash(layer*97 + rank*53 + t*29 + if direction > 0.0 {2} else {1}) * 7.0) as usize
+                        } else {
+                            1 + (hash(layer*173 + rank*31 + t*43) * 6.0) as usize
+                        };
+                        let shade = shade.min(pens.len()-1);
+                        let _ = SelectObject(hdc, HGDIOBJ(pens[shade].0));
+                        line(hdc, px, py, tx, ty, scale);
+                        // Four pairs of needles along each shoot.
+                        for needle in 1..=4u32 {
+                            let v = needle as f32 / 5.0;
+                            let nx = px + (tx-px)*v;
+                            let ny = py + (ty-py)*v;
+                            let spike = 2.5 + 4.0 * u + 1.4 * hash(layer*233 + rank*97 + t*13 + needle);
+                            let _ = SelectObject(hdc, HGDIOBJ(pens[(shade+1).min(11)].0));
+                            line(hdc, nx - spike*0.5, ny + spike*0.28, nx + spike*0.25, ny - spike, scale);
+                            line(hdc, nx + spike*0.5, ny + spike*0.20, nx - spike*0.25, ny - spike*0.76, scale);
+                        }
+                    }
+                }
+                if depth > 0.45 && layer % 4 == 0 {
+                    // Lit tips on the front of the crown are pale green.
+                    let _ = SelectObject(hdc, HGDIOBJ(pens[10].0));
+                    line(hdc, tip_x - 3.0, tip_y - 2.0, tip_x + 3.0, tip_y - 5.0, scale);
+                }
+            }
+        }
+        for pen in pens {
+            let _ = DeleteObject(HGDIOBJ(pen.0));
+        }
+    }
+}
+
+fn cached_fir(hdc: HDC, size: u32) {
+    FIR.with_borrow_mut(|slot| {
+        if slot.as_ref().is_none_or(|cache| cache.size != size) {
+            *slot = None;
+            unsafe {
+                let width = 260 * size as i32 / 100;
+                let height = 346 * size as i32 / 100;
+                let Ok(dc) = CreateCompatibleDC(Some(hdc)) else { return };
+                let Ok(bitmap) = CreateCompatibleBitmap(hdc, width, height) else {
+                    let _ = DeleteDC(dc);
+                    return;
+                };
+                let previous = SelectObject(dc, HGDIOBJ(bitmap.0));
+                let bg = CreateSolidBrush(CLEAR);
+                let _ = FillRect(dc, &RECT { left: 0, top: 0, right: width, bottom: height }, bg);
+                let _ = DeleteObject(HGDIOBJ(bg.0));
+                draw_fir(dc, size as f32 / 100.0);
+                *slot = Some(CachedFir { dc, bitmap, previous, size });
+            }
+        }
+        if let Some(cache) = slot.as_ref() {
+            unsafe {
+                let _ = BitBlt(hdc, 0, 0, 260 * size as i32 / 100,
+                    346 * size as i32 / 100, Some(cache.dc), 0, 0, SRCCOPY);
+            }
+        }
+    });
 }
 
 fn paint(hwnd: HWND) {
@@ -278,7 +393,7 @@ fn paint(hwnd: HWND) {
         let trunk = CreateSolidBrush(rgb(108, 66, 39));
         FillRect(hdc, &RECT { left: p(115.0), top: p(253.0), right: p(146.0), bottom: p(322.0) }, trunk);
         let _ = DeleteObject(HGDIOBJ(trunk.0));
-        for i in 0..LEVELS.len() { bough(hdc, i, scale); }
+        cached_fir(hdc, cfg.size);
 
         // An illuminated five-point topper.
         let points: Vec<POINT> = (0..10).map(|i| {
@@ -314,21 +429,24 @@ fn paint(hwnd: HWND) {
             }
         }
 
-        // Snow load sits on particular boughs; falling flakes and edge slides are animated.
+        // Small irregular snow patches rest on needles, not giant white disks.
         if cfg.snow {
             for i in 0..LEVELS.len() {
                 let mass = piles[i];
                 if mass < 0.035 { continue; }
-                let span = REACH[i] * (0.22 + mass * 0.38);
-                let top = LEVELS[i] - 6.0 - 6.0 * mass;
-                let snow = CreateSolidBrush(rgb(238, 246, 252));
-                let old = SelectObject(hdc, HGDIOBJ(snow.0));
-                let _ = Ellipse(hdc, p(130.0-span), p(top), p(130.0+span), p(LEVELS[i]+2.0));
-                let _ = SelectObject(hdc, old);
-                let _ = DeleteObject(HGDIOBJ(snow.0));
+                let width = REACH[i] * (0.16 + mass * 0.48);
+                let y = LEVELS[i] - 11.0;
+                for n in 0..14 {
+                    let t = n as f32 / 13.0;
+                    let x = 130.0 + (t * 2.0 - 1.0) * width;
+                    let chance = hash(i as u32 * 107 + n as u32 * 31 + 29);
+                    if chance > mass + 0.15 { continue; }
+                    let yy = y + 4.0 * (t - 0.5).abs() + hash(i as u32 * 143 + n as u32 * 17) * 5.0;
+                    circle(hdc, x, yy, 1.0 + mass * 1.8, rgb(233, 245, 250), scale);
+                }
             }
             for flake in &flakes {
-                circle(hdc, flake.x, flake.y, if flake.sliding { 3.4 } else { 1.9 }, rgb(246, 250, 255), scale);
+                circle(hdc, flake.x, flake.y, if flake.sliding { 3.1 } else { 1.8 }, rgb(246, 250, 255), scale);
             }
         }
 
