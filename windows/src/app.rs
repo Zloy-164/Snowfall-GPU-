@@ -22,6 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{PCWSTR, Result, w};
 
 use crate::halloween;
+use crate::christmas;
 use crate::log;
 use crate::menu::{self, Entry, Icon, Tile};
 use crate::prefs::{self, Settings};
@@ -56,6 +57,12 @@ const ID_BLOSSOM: u32 = 217;
 const ID_MIXED: u32 = 219;
 const ID_GROUND: u32 = 220;
 const ID_OPACITY_FOLD: u32 = 221;
+const ID_TREE: u32 = 230;
+const ID_TREE_LIGHTS: u32 = 231;
+const ID_TREE_SMALL: u32 = 232;
+const ID_TREE_MEDIUM: u32 = 233;
+const ID_TREE_LARGE: u32 = 234;
+const ID_HALLOWEEN_NIGHT: u32 = 235;
 /// Opacity from 10% up in steps of 5%: `ID_OPACITY` + the step.
 const ID_OPACITY: u32 = 400;
 const OPACITY_STEPS: u32 = 19;
@@ -205,6 +212,7 @@ pub fn run() -> Result<()> {
         let light = light_taskbar();
         let icon = tray_icon(emblem, light);
         add_tray_icon(window, icon);
+        christmas::configure(settings.tree_on, settings.tree_size, settings.tree_lights);
         let _ = WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION);
         let _ = RegisterPowerSettingNotification(HANDLE(window.0), &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
         SetTimer(Some(window), TIMER_HALLOWEEN, 60_000, None);
@@ -326,6 +334,7 @@ fn entries(settings: &Settings, _login: bool, sliders: bool) -> Vec<Entry> {
         kind(ID_BLOSSOM, tr("blossom"), Mode::Blossom),
         Entry::Separator,
         Entry::item(ID_HALLOWEEN, tr("halloween"), halloween::wanted(settings.halloween), falling == [Mode::Snow]),
+        Entry::toggle(ID_HALLOWEEN_NIGHT, "Хэллоуин: ночное освещение", settings.halloween_night, true),
     ];
     let mut behavior = vec![Entry::header(tr("behavior"))];
     // Rain doesn't lie anywhere: nothing to keep, melt or clear.
@@ -381,6 +390,17 @@ fn entries(settings: &Settings, _login: bool, sliders: bool) -> Vec<Entry> {
     };
     entries.extend(accumulate(settings, !heaps.is_empty(), sliders));
     entries.push(Entry::Submenu { label: tr("mode").to_string(), entries: modes });
+    entries.push(Entry::Submenu {
+        label: "🎄 Новогодняя ёлочка".to_string(),
+        entries: vec![
+            Entry::toggle(ID_TREE, "Показать ёлочку", settings.tree_on, true),
+            Entry::toggle(ID_TREE_LIGHTS, "Мерцающие огоньки", settings.tree_lights, true),
+            Entry::Separator,
+            Entry::choice(ID_TREE_SMALL, "Размер: маленькая (60%)", settings.tree_size == 60),
+            Entry::choice(ID_TREE_MEDIUM, "Размер: средняя (100%)", settings.tree_size == 100),
+            Entry::choice(ID_TREE_LARGE, "Размер: большая (140%)", settings.tree_size == 140),
+        ],
+    });
     if !heaps.is_empty() {
         entries.push(Entry::item(ID_CLEAR, text::kinds("clear", &heaps), false, true));
     }
@@ -480,6 +500,25 @@ fn choose(window: HWND, chosen: u32, _login: bool) {
         }),
         ID_ACCUMULATE => ACCUMULATE_OPEN.set(!ACCUMULATE_OPEN.get()),
         ID_OPACITY_FOLD => OPACITY_OPEN.set(!OPACITY_OPEN.get()),
+        ID_TREE | ID_TREE_LIGHTS | ID_TREE_SMALL | ID_TREE_MEDIUM | ID_TREE_LARGE | ID_HALLOWEEN_NIGHT => {
+            APP.with_borrow_mut(|app| {
+                let Some(app) = app else { return };
+                match chosen {
+                    ID_TREE => app.settings.tree_on = !app.settings.tree_on,
+                    ID_TREE_LIGHTS => app.settings.tree_lights = !app.settings.tree_lights,
+                    ID_TREE_SMALL => app.settings.tree_size = 60,
+                    ID_TREE_MEDIUM => app.settings.tree_size = 100,
+                    ID_TREE_LARGE => app.settings.tree_size = 140,
+                    ID_HALLOWEEN_NIGHT => {
+                        app.settings.halloween_night = !app.settings.halloween_night;
+                        send(app, Command::HalloweenNight(app.settings.halloween_night));
+                    }
+                    _ => {}
+                }
+                app.settings.save();
+                christmas::configure(app.settings.tree_on, app.settings.tree_size, app.settings.tree_lights);
+            });
+        },
         ID_HALLOWEEN => {
             APP.with_borrow_mut(|app| {
                 let Some(app) = app else { return };
@@ -601,6 +640,7 @@ fn notify(window: HWND, title: &str, text: &str) {
 }
 
 fn quit(window: HWND) {
+    christmas::shutdown();
     remove_tray_icon(window);
     if let Some(mut app) = APP.with_borrow_mut(Option::take) {
         send(&app, Command::Quit);
