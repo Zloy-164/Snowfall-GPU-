@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod app;
+mod christmas;
 mod desktop;
 mod halloween;
 mod light;
