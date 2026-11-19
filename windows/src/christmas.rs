@@ -276,6 +276,7 @@ fn draw_fir(hdc: HDC, scale: f32) {
         let pens: Vec<HPEN> = needles.iter()
             .map(|&c| CreatePen(PS_SOLID, (scale * 0.85).round().max(1.0) as i32, c).unwrap_or_default())
             .collect();
+        let old_pen = SelectObject(hdc, HGDIOBJ(pens[0].0));
         // Back-facing limbs first, front-facing limbs last.
         // The ring radii expand continuously to create a natural silhouette.
         for layer in 0..67u32 {
@@ -342,9 +343,8 @@ fn draw_fir(hdc: HDC, scale: f32) {
                 }
             }
         }
-        for pen in pens {
-            let _ = DeleteObject(HGDIOBJ(pen.0));
-        }
+        let _ = SelectObject(hdc, old_pen);
+        for pen in pens { let _ = DeleteObject(HGDIOBJ(pen.0)); }
     }
 }
 
@@ -355,8 +355,8 @@ fn cached_fir(hdc: HDC, size: u32) {
             unsafe {
                 let width = 260 * size as i32 / 100;
                 let height = 346 * size as i32 / 100;
-                let Ok(dc) = CreateCompatibleDC(Some(hdc)) else { return };
-                let Ok(bitmap) = CreateCompatibleBitmap(hdc, width, height) else {
+                let dc = CreateCompatibleDC(Some(hdc));
+                let bitmap = CreateCompatibleBitmap(hdc, width, height);
                     let _ = DeleteDC(dc);
                     return;
                 };
