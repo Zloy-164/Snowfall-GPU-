@@ -40,6 +40,10 @@ pub struct Settings {
     pub tree_on: bool,
     pub tree_size: u32,
     pub tree_lights: bool,
+    /// 0: classic, 1: warm white, 2: icy blue, 3: retro coloured.
+    pub tree_garland: u32,
+    /// Snow accumulates on the tree's boughs, then slides and falls.
+    pub tree_snow: bool,
     /// What falls: snow, leaves or rain; the kind picked last.
     pub mode: Mode,
     /// Two kinds fall together: `mix`, the one picked last after the one picked before it.
@@ -90,6 +94,8 @@ impl Settings {
             tree_on: read(w!("christmasTreeOn")).is_some_and(|v| v != 0),
             tree_size: read(w!("christmasTreeSize")).unwrap_or(100).clamp(60, 160),
             tree_lights: read(w!("christmasTreeLights")).is_none_or(|v| v != 0),
+            tree_garland: read(w!("christmasTreeGarland")).unwrap_or(0).min(3),
+            tree_snow: read(w!("christmasTreeSnow")).is_none_or(|v| v != 0),
             halloween: Choice { on: read(w!("halloweenOn")).is_some_and(|v| v != 0), skipped: read(w!("halloweenSkipped")).unwrap_or(0) },
             // Before rain there was only a switch for leaves.
             max_performance: read(w!("performance")).is_some_and(|v| v == 1),
@@ -116,6 +122,8 @@ impl Settings {
         write(w!("christmasTreeOn"), self.tree_on as u32);
         write(w!("christmasTreeSize"), self.tree_size);
         write(w!("christmasTreeLights"), self.tree_lights as u32);
+        write(w!("christmasTreeGarland"), self.tree_garland);
+        write(w!("christmasTreeSnow"), self.tree_snow as u32);
         write(w!("halloweenOn"), self.halloween.on as u32);
         write(w!("halloweenSkipped"), self.halloween.skipped);
         write(w!("mode"), MODES.iter().position(|&m| m == self.mode).unwrap_or(0) as u32);
